@@ -1,0 +1,623 @@
+<!DOCTYPE HTML>
+<html lang="en">
+<head>
+  <title>Scaling of Many-Task Computing Approaches in Python on Cluster Supercomputers</title>
+<style>
+
+@import url(css/stack.css);
+@import url(css/styles/default.css);
+@import url(css/ipython.css);
+
+.stack {
+  background: white;
+  color: #636363;
+  font-size: 30px;
+  width: 1024px;
+  height: 768px;
+  padding: 40px 80px;
+}
+
+iframe{
+  height: 85%;
+  width: 100%;
+  border: none;
+}
+
+pre{
+  font-size: 60%;
+  line-height: 120%;
+  display: block;
+  padding: 0.5em;
+  word-break: break-all;
+  word-wrap: break-word;
+  white-space: pre;
+  white-space: pre-wrap;
+  background: #f5f5f5;
+  font-family: Monaco, Menlo, Consolas, "Courier New", monospace;
+  -webkit-border-radius: 3px;
+  -moz-border-radius: 3px;
+  border-radius: 3px;
+  border: 1px solid #ccc;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  color: #333333;
+}
+
+code{
+  font-family: Monaco, Menlo, Consolas, "Courier New", monospace;
+}
+
+/*so it works with highlight.js*/
+pre code{
+    background: #f5f5f5;
+    padding: 0;
+}
+
+p.small{
+  font-size: 18px;
+}
+
+li{
+  padding: 0.2em;
+}
+
+p,ul{
+  margin-top: 0.2em;
+  margin-bottom: 0.2em;
+}
+
+h1,h2,h3{
+  margin-bottom: 0.4em;
+  margin-top: 0.4em;
+}
+
+.subtitle{
+  color: white;
+  background-color: rgb(116,116,116);
+  text-align: center;
+}
+
+
+</style>
+  <script src="js/highlight.pack.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script>
+</head>
+<body class="overview">
+
+<section>
+  <h1>Scaling of Many-Task Computing Approaches in Python on Cluster Supercomputers</h1>
+  <p>Monte Lunacek</p>
+  <p>Jazcek Braden</p>
+  <p>Thomas Hauser</p>
+  <br>
+  <p><strong>Research Computing</strong></p>
+  <p><em>University of Colorado</em></p>
+</section>
+
+<section>
+  <h1>Outline</h1>
+  <ul>
+    <li>What is Many-task Computing?
+        <ul><li>Define the subset</li>
+            <li>Examples from UCB</li>
+            <li>Approaches</li>
+        </ul>
+    </li>
+      <li>Why Python?
+      <ul>
+      <li>Abstraction</li>  
+      <li>Fault-tolerance, elasticity</li>
+      <li>Example</li>
+      </ul>
+    </li>
+    <li>Weak scaling study</li>
+    <li>Conclusions</li>
+  </ul>
+</section>
+
+<!-- <section class="subtitle">
+<img src="img/parallel.png" style="margin:30px auto;display:block; width:800px"  alt="monty-python.jpg"> 
+<h2>What is Many-task Computing?</h2>
+</section> -->
+
+
+<section>
+  <h2>Landscape of Applications</h2>
+  <img src="img/MTC.svg" style="margin:auto; auto;display:block; height: 525px;">
+  <p class="small">Ioan Raicu, <a href="http://datasys.cs.iit.edu/publications/2009_PhD-UChicago_dissertation.pdf">Many-Task Computing: Bridging the Gap between High Throughput Computing and High Performance Computing</a></p>
+</section>
+
+
+<section>
+  <h2>Comparing MTC and HTC</h2>
+  <ul>
+    <li><strong>Many-task Computing</strong>  (MTC)
+      <ul>
+        <li>Use a large resources over a short period</li>
+        <li>May not be single-core and independent</li>
+        <li><em>Performance per second</em></li>
+      </ul>
+    </li>
+    <li><strong>High-throughput Computing</strong>  (HTC)
+      <ul>
+        <li>Operations per month</li>
+      </ul>
+    </li>
+  </ul>  
+  
+</section>
+
+
+<section>
+<h2>University of Colorado</h2>
+<ul>
+<li>Some tightly-coupled MPI codes</li>
+<li>Many simulations
+<ul>
+  <li>Monte Carlo, parameter scans, UQ, parameter optimization</li>
+  </ul>
+</li>
+<li>Diverse computing backgrounds
+  <ul>
+  <li>Geography, Ecology and Evolutionary Biology, Microbial Ecology,
+    Geology, Astronomy</li>
+  </ul>
+</li>
+<li>Range of computational experience</li>
+<li>Range of software</li>
+</ul>
+</section>
+
+<section>
+<h1>Examples</h1>
+
+<p>Matlab</p>
+<pre class="bash"><code>matlab -nodesktop -nosplash -nodisplay -r forJanusOpt > output
+</code></pre>  
+
+<p>IDL</p>
+<pre class="bash"><code>sh /home/chmo1906/idl_wrapper.sh 020000 MHD_MEAN_80G MHD_MEAN
+</code></pre>  
+
+<pre class="bash"><code>#!/bin/bash
+job_name=Spectrum_$2_6x3Mn_8km_ng_$1
+cd /lustre/janus_scratch/chmo1906/rhsc3d/run_$3_6x3Mm_8km_ng$1
+
+idl << EOF
+
+.r readall
+$job_name = SPECTRUM
+SAVE, $job_name, FILENAME = '$2_6x3Mm_8km_ng_$1.SAV'
+SAVE, $job_name, FILENAME = '/projects/chmo1906/IDL/$2_6x3Mm_8km_ng_$1.SAV'
+exit 
+
+EOF
+</code></pre>
+
+</section>
+
+<section>
+<h2>Approach</h2>
+
+<blockquote>
+  What's the most efficient way to run my simulation multiple times?
+</blockquote>
+
+<ul>
+  <li>Moab,SLURM,or Condor</li>
+  <li>Bash, pbsdsh, or Falkon</li>
+  <li>MPI (mpi4py): not <em>always</em> what we want</li>  
+  <li>Python
+    <ul>
+      <li>SAGA BigJob</li>
+      <li>multiprocessing: simple and included
+      <li>Message broker: IPython parallel, Celery</li>
+    </ul>
+  </li>
+  <li>And many, many more...</li>
+</ul>
+</section>
+
+
+<section>
+<h1>Abstraction is important</h1>
+
+<pre><code>mpirun load_balance -f /home/chmo1906/cmdlist</code></pre>
+
+<p>Where the cmdlist enumerate the lines they would like to run</p>
+
+<pre><code>sh /home/chmo1906/run_scripts/idl_wrapper.sh 016000 MHD_MEAN_80G MHD_MEAN
+sh /home/chmo1906/run_scripts/idl_wrapper.sh 017000 MHD_MEAN_80G MHD_MEAN
+sh /home/chmo1906/run_scripts/idl_wrapper.sh 018000 MHD_MEAN_80G MHD_MEAN
+...
+</code></pre>
+
+<p>Sometimes fails</p>
+<ul>
+  <li>Unknown parameters</li>
+  <li>Node crashes</li>
+</ul>
+</section>  
+
+
+<!-- <section class="subtitle">
+<img src="img/monty-python.png" style="margin:20px auto;display:block; height:500px"  alt="monty-python.jpg"> 
+<h2>Why Python?</h2>
+</section> -->
+
+<section>
+<h2>Python</h2>
+<ul>
+<li>Flexible, powerful programming language</li>
+<li>Free and open</li>
+<li>Large community</li>
+<li><strong>Abstraction</strong></li>
+<li>Some packages offer different characteristics
+  <ul>
+    <li>Fault-tolerance</li>
+    <li>Elasticity</li>
+    <li>Persistence</li>
+</li>
+</ul>
+</section>
+
+<section>
+<h2><strong>Success</strong> Stories</h2>
+
+<ul>
+  <li>~500,000 simulations on ~7,000 cores with <a href="http://mpi4py.scipy.org/">mpi4py </a></li>
+  <li>Geology optimization on ~100 cores with <a href="https://code.google.com/p/scoop/"> Scoop </a>
+      and <a href="https://code.google.com/p/deap/"> DEAP </a></li>
+  <li>Improved biological workflow with 
+  <a href="http://ipython.org/ipython-doc/dev/parallel/"> IPython Parallel </a></li>    
+  <li>Wrapped CFD with     
+  <a href="http://www.scipy.org/F2py"> f2py</a> and
+  <a href="http://ipython.org/ipython-doc/dev/parallel/"> IPython Parallel </a></li>
+  <li>Packaged multiple MPI tasks with 
+  <a href="http://jinja.pocoo.org/docs/"> Jinja2 </a></li>
+  <li>Benchmarking:
+<a href="http://mpi4py.scipy.org/">mpi4py </a>, 
+<a href="http://discoproject.org/"> pandas </a>,
+<a href="http://jinja.pocoo.org/docs/"> Jinja2 </a>,
+<a href="https://www.djangoproject.com/"> Django </a></li>
+</ul>
+<br>
+<p>Working on</p>
+<ul>
+  <li>MapReduce with 
+  <a href="http://discoproject.org/"> disco </a> and <a href="http://spark.incubator.apache.org/">spark</a></li>
+  <li>Workflow with 
+  <a href="http://networkx.github.com/"> NetworkX </a>, <a href="http://ipython.org/ipython-doc/dev/parallel/"> IPython Parallel </a>, and 
+  <a href="https://code.google.com/p/scoop/"> Scoop </a></li>
+</ul>
+</section>
+
+
+<!-- IPYTHON NOTEBOOK -->
+<section>
+  <h1>IPython Parallel</h1>
+  <img src="img/ipython.png" style="margin:20px auto; display: block;">
+
+    <p>Fault-tolerance, elasticity, and persistence
+
+</section>
+
+
+<section>
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="ipython-parallel-example">Ipython parallel example</h2>
+</div>
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Start the engines</p>
+</div>
+<div class="cell border-box-sizing code_cell vbox">
+<div class="input hbox">
+<div class="prompt input_prompt">
+In&nbsp;[]:
+</div>
+<div class="input_area box-flex1">
+<div class="highlight"><pre><span class="o">!</span>ipcluster start --profile<span class="o">=</span>ssh
+</pre></div>
+</div>
+</div>
+</div>
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Define test function</p>
+</div>
+<div class="cell border-box-sizing code_cell vbox">
+<div class="input hbox">
+<div class="prompt input_prompt">
+In&nbsp;[83]:
+</div>
+<div class="input_area box-flex1">
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">work</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+    <span class="kn">import</span> <span class="nn">time</span><span class="o">,</span> <span class="nn">os</span>
+    <span class="n">start_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+    <span class="n">end_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s">&#39;pid&#39;</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">(),</span> 
+            <span class="s">&#39;start_time&#39;</span><span class="p">:</span> <span class="n">start_time</span><span class="p">,</span> 
+            <span class="s">&#39;end_time&#39;</span><span class="p">:</span> <span class="n">end_time</span><span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Create a list of tasks</p>
+</div>
+<div class="cell border-box-sizing code_cell vbox">
+<div class="input hbox">
+<div class="prompt input_prompt">
+In&nbsp;[84]:
+</div>
+<div class="input_area box-flex1">
+<div class="highlight"><pre><span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="n">num_workers</span> <span class="o">=</span> <span class="mi">36</span>
+<span class="n">job_times</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">*</span><span class="mi">10</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div></section>
+
+
+
+<section>
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="client-and-load-balanced-view">Client and load balanced view</h2>
+</div>
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Create the <code>Client</code> - May need to wait a minute</p>
+</div>
+<div class="cell border-box-sizing code_cell vbox">
+<div class="input hbox">
+<div class="prompt input_prompt">
+In&nbsp;[91]:
+</div>
+<div class="input_area box-flex1">
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">IPython.parallel</span> <span class="kn">import</span> <span class="n">Client</span>
+<span class="n">rc</span> <span class="o">=</span> <span class="n">Client</span><span class="p">(</span><span class="n">profile</span><span class="o">=</span><span class="s">&#39;ssh&#39;</span><span class="p">)</span>
+<span class="k">print</span> <span class="nb">len</span><span class="p">(</span><span class="n">rc</span><span class="o">.</span><span class="n">ids</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="vbox output_wrapper">
+<div class="output vbox">
+<div class="hbox output_area"><div class="prompt"></div>
+<div class="box-flex1 output_subarea output_stream output_stdout">
+<pre>
+36
+
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Execute: <code>map</code> the <code>job_times</code> list onto the <code>work</code> function</p>
+</div>
+<div class="cell border-box-sizing code_cell vbox">
+<div class="input hbox">
+<div class="prompt input_prompt">
+In&nbsp;[93]:
+</div>
+<div class="input_area box-flex1">
+<div class="highlight"><pre><span class="kn">import</span> <span class="nn">time</span>
+<span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+
+<span class="n">lview</span> <span class="o">=</span> <span class="n">rc</span><span class="o">.</span><span class="n">load_balanced_view</span><span class="p">()</span>
+<span class="n">results</span> <span class="o">=</span> <span class="n">lview</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">work</span><span class="p">,</span> <span class="n">job_times</span><span class="p">)</span>
+<span class="n">results</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+
+<span class="k">print</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span>
+</pre></div>
+</div>
+</div>
+<div class="vbox output_wrapper">
+<div class="output vbox">
+<div class="hbox output_area"><div class="prompt"></div>
+<div class="box-flex1 output_subarea output_stream output_stdout">
+<pre>
+21.7764251232
+
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+
+
+
+
+
+</section>
+
+<section>
+  <h1>Schedules and failures illustration</h1>
+  <p class="small"><a href="http://bl.ocks.org/mlunacek/6590169">http://bl.ocks.org/mlunacek/6590169</a></p>
+<iframe src="http://bl.ocks.org/mlunacek/raw/6590169"></iframe>
+</section>
+
+
+
+
+
+
+<!-- <section>
+
+
+<section class="slide">
+<iframe src="http://nbviewer.ipython.org/6587193" seamless></iframe>
+</section>
+
+<section class="slide">
+<iframe src="http://nbviewer.ipython.org/6570790"></iframe>
+</section>
+
+<section class="slide">
+<iframe src="http://nbviewer.ipython.org/6574021"></iframe>
+</section>
+ -->
+
+
+<section>
+<h2><strong>Weak</strong> Scaling</h2>
+
+<p>Compare: mpi4py, IPython Parallel, Celery</p>
+
+<p>What recommendations can we offer?</p>
+
+<p>Best case scenario</p>
+<ul>
+<li>Small messages, limited file IO, sleep</li>
+<li>No contention</li>
+</ul>
+
+<p>Weak scaling</p>
+<ul><li>task = 10 * number of cores</li>
+<li>up to 12,288 cores</li>
+<li>time uniform(27,33) seconds</li>
+</ul>
+</section>
+
+<section>
+<h2>Initialization</h2>
+<img src="img/pres_init_time.png" style="margin:5px auto; height:550px; display:block;"  alt="some_text">   
+</section>
+
+<section>
+<h2>Weak scaling time</h2>
+<img src="img/pres_time.png" style="margin:5px auto; height:550px; display:block;"> 
+</section>
+
+<section>
+<h2>Weak scaling efficiency</h2>
+<img src="img/pres_efficiency.png" style="margin:5px auto; height:550px; display:block;"> 
+</section>
+
+<section>
+<h1>Key Points</h1>
+
+<ul>
+<li>IPython
+  <ul><li>Dynamic: hub becomes a bottleneck</li>
+    <li>Lots of communication: heart beats, ...</li>
+    <li>Elasticity, lots of features</li>
+  </ul>
+</li>
+
+<li>Celery
+  <ul><li>Hierarchical: one <em>hub</em> per node
+  </li>
+<li>Configuration is difficult</li></ul>
+</li>
+
+<li>MPI
+  <ul><li>Dynamic: master core does not work
+  </li>
+<li>Very efficient!</li></ul>
+</li>
+</ul>
+
+</section>
+
+<!-- 
+<section>
+<h2> Compare </h2>
+<table class="table table-bordered">
+  <tr class="success">
+       <td>mpi4py</td>
+      <td>many cores, not fault-tolerant</td> 
+  </tr>
+  <tr class="success">
+      <td>IPython</td>
+      <td>100 cores, fault-tolerant</td>
+  </tr>
+  <tr class="success">
+      <td>IPython</td>
+      <td>many cores, fault-tolerant, consistent time</td>
+  </tr>
+  <tr class="warning">
+      <td>Celery</td>
+      <td>many cores, fault-tolerant, variable time</td>
+  </tr>
+  <tr class="success">
+      <td>Multiprocessing</td>
+      <td>single-node</td>
+  </tr>
+</table>
+<table class="table table-bordered">
+  <tr class="error">
+      <td>IPython, Celery</td>
+      <td>launching</td>
+  </tr>
+  <tr class="error">
+      <td>all</td>
+      <td>user abstraction</td>
+  </tr>
+</table>
+
+</section>   -->
+
+
+<section>
+<h1>Even easier</h1>
+
+<p>Simple interface for MTC
+    <a href="https://github.com/mlunacek/load_balance_ipython">load_balance_ipython</a></p>
+
+<pre  class='python'><code>import loadbalance
+</code></pre>
+
+<pre  class='python'><code>lb = loadbalance.LoadBalance(ppn=4)
+</code></pre>
+
+<ul>
+<li>Creates profile</li>
+<li>Knows when engines are ready</li>
+</ul>
+<br>
+<p>Map to python functions</p>
+<pre  class='python'><code>lb.set_retries(10)
+results = lb.lview.map(func, params) 
+</code></pre>
+
+<p>Makes a subprocess call (e.g. matlab, IDL, ect.)</p>
+<pre  class='python'><code>lb.run_commands(command_list)  
+</code></pre>
+
+</section>
+
+
+<section>
+
+<h2>Conclusions</h2>
+<p>Python is an excellent way to manage MTC jobs</p>
+<p>Python provides great <strong>abstraction</strong></p>
+<p>Great features</p>
+<ul>
+  <li><strong>elastic</strong>, persistence, fault-tolerant</li>
+</ul>
+
+<br>
+<p>Moving forward</p>
+<ul>
+  <li> Simple interface for MTC
+    <a href="https://github.com/mlunacek/load_balance_ipython">load_balance_ipython</a>
+  </li>
+  <li> Realistic tasks </li>
+  <li> Initialization time </li>
+</ul>     
+</section>
+
+
+
+
+<script src="js/d3.v3.min.js"></script>
+<script src="js/stack.v0.min.js"></script>
+</body>
+</html>
+
+
